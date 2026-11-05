@@ -66,9 +66,9 @@ py -3 -m venv .venv
 
 Windows does not expose CPU/GPU temperatures to normal programs — reading them needs a kernel driver. pcmon does not ship one; it reads them from LibreHardwareMonitor's local web server instead:
 
-1. `winget install LibreHardwareMonitor.LibreHardwareMonitor`
+1. `winget install LibreHardwareMonitor.LibreHardwareMonitor` — a portable package: no installer, no Start Menu entry. The exe lands in `%LOCALAPPDATA%\Microsoft\WinGet\Packages\LibreHardwareMonitor.LibreHardwareMonitor_*\`.
 2. Run it as administrator → **Options → Remote Web Server → Run** (port 8085).
-3. Optional: **Options → Run On Windows Startup**, **Start Minimized** and **Minimize To Tray**.
+3. **Options → Run On Windows Startup**, so temperatures survive a reboot; also **Start Minimized** and **Minimize To Tray** to keep it out of the way. It then lives in the tray as a background process (~100 MB RAM).
 
 pcmon polls `http://localhost:8085/data.json` in a background thread. If LHM is not running, everything else keeps working and the temperatures are simply hidden. Use `PCMON_LHM_URL` to point at another port.
 
@@ -79,8 +79,6 @@ pcmon polls `http://localhost:8085/data.json` in a background thread. If LHM is 
 - **Disk busy** — `100 − \PhysicalDisk(_Total)\% Idle Time`.
 - **Rendering** — every second the cursor jumps home (`ESC[H`) and each line is overwritten and cleared to the end (`ESC[K`), so there is no flicker. Bars have 1/8-character resolution (`▏▎▍▌▋▊▉█`).
 - **Strip toggle** — the strip sets its terminal title to `pcmon-strip`; the action closes a pane with that title in the current tab, or splits the focused pane with a ratio computed to leave the strip a fixed number of rows.
-
-Code comments and on-screen labels are in Spanish.
 
 ## License
 

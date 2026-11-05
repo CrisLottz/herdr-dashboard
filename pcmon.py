@@ -1,23 +1,23 @@
-"""pcmon — monitor de recursos en la terminal para Windows, pensado para Herdr.
+"""pcmon — a live resource monitor for the Windows terminal, built for Herdr.
 
-Modos:
-    pcmon.py               vista completa (para un popup o un pane grande)
-    pcmon.py --strip       tira de una línea (para dejarla abajo de una columna)
-    pcmon.py --toggle-strip  abre o cierra la tira bajo el pane enfocado de Herdr
-    pcmon.py --open-popup    abre la vista completa como popup de Herdr
-Salir: q, Esc o Ctrl+C.
+Modes:
+    pcmon.py                 full view (for a popup or a large pane)
+    pcmon.py --strip         one-line strip (to keep under a column)
+    pcmon.py --toggle-strip  open or close the strip under Herdr's focused pane
+    pcmon.py --open-popup    open the full view as a Herdr popup
+Quit: q, Esc or Ctrl+C.
 
-Fuentes de datos:
-- psutil: CPU (total y por hilo), RAM, swap, disco (espacio + E/S), red.
-- PDH (contadores de rendimiento de Windows, vía pywin32): uso de GPU, VRAM y
-  ocupación del disco. Es la fuente del Administrador de tareas, así que sirve
-  para AMD, Intel y NVIDIA sin SDKs del fabricante.
-- LibreHardwareMonitor (opcional): temperaturas. Windows no las expone sin un
-  driver de kernel; LHM lo trae y publica todo en http://localhost:8085/data.json.
-  Si LHM no está corriendo, pcmon sigue funcionando sin temperaturas.
+Data sources:
+- psutil: CPU (total and per thread), RAM, swap, disk (space + I/O), network.
+- PDH (Windows performance counters, through pywin32): GPU usage, VRAM and
+  disk busy time. Task Manager reads the same source, so it works with AMD,
+  Intel and NVIDIA without vendor SDKs.
+- LibreHardwareMonitor (optional): temperatures. Windows does not expose them
+  without a kernel driver; LHM ships one and publishes everything at
+  http://localhost:8085/data.json. Without LHM, pcmon still runs, minus temperatures.
 
-Render: ANSI a mano (sin librerías de TUI). Cada vuelta mueve el cursor al
-inicio y reescribe encima en vez de limpiar la pantalla, por eso no parpadea.
+Rendering: hand-written ANSI (no TUI library). Each frame moves the cursor home
+and overwrites the previous one instead of clearing the screen, so it never flickers.
 """
 
 import collections
@@ -36,14 +36,14 @@ import winreg
 import psutil
 import win32pdh
 
-INTERVAL = 1.0          # segundos entre muestras
-HISTORY = 120           # muestras guardadas para los sparklines
-SPARK = " ▁▂▃▄▅▆▇█"     # 9 niveles: 0 = vacío, 8 = lleno
+INTERVAL = 1.0          # seconds between samples
+HISTORY = 120           # samples kept for the sparklines
+SPARK = " ▁▂▃▄▅▆▇█"     # 9 levels: 0 = empty, 8 = full
 SPINNER = "◐◓◑◒"
 LHM_URL = os.environ.get("PCMON_LHM_URL", "http://localhost:8085/data.json")
-STRIP_TITLE = "pcmon-strip"   # título de terminal con el que se reconoce la tira
+STRIP_TITLE = "pcmon-strip"   # terminal title that identifies the strip pane
 
-# --- colores ANSI (256 colores) ----------------------------------------------
+# --- ANSI colors (256-color palette) -----------------------------------------
 RESET, BOLD, DIM = "\x1b[0m", "\x1b[1m", "\x1b[2m"
 
 
@@ -52,36 +52,36 @@ def fg(n):
 
 
 def level_color(pct):
-    """Verde < 60 %, amarillo < 85 %, rojo >= 85 %."""
+    """Green < 60 %, yellow < 85 %, red >= 85 %."""
     return fg(42) if pct < 60 else fg(220) if pct < 85 else fg(196)
 
 
 def temp_color(c):
-    """Verde < 70 °C, amarillo < 85 °C, rojo >= 85 °C."""
+    """Green < 70 °C, yellow < 85 °C, red >= 85 °C."""
     return fg(42) if c < 70 else fg(220) if c < 85 else fg(196)
 
 
-# --- GPU y disco vía PDH -----------------------------------------------------
+# --- GPU and disk through PDH ------------------------------------------------
 class PdhCounters:
-    """Contadores PDH con comodín (*): PDH incluye solos los procesos nuevos,
-    así que no hay que re-expandir las instancias en cada vuelta."""
+    """Wildcard (*) PDH counters: PDH picks up new processes on its own, so the
+    instances never need to be re-expanded on each frame."""
 
     def __init__(self):
         self.query = win32pdh.OpenQuery()
         add = lambda path: win32pdh.AddEnglishCounter(self.query, path)
-        # Una instancia por (proceso, motor); filtramos el motor 3D, que es
-        # lo que el Administrador de tareas muestra como "GPU" por defecto.
+        # One instance per (process, engine); keep the 3D engine, which is what
+        # Task Manager shows as "GPU" by default.
         self.engine = add(r"\GPU Engine(*engtype_3D)\Utilization Percentage")
         self.vram = add(r"\GPU Adapter Memory(*)\Dedicated Usage")
         self.disk_idle = add(r"\PhysicalDisk(_Total)\% Idle Time")
-        win32pdh.CollectQueryData(self.query)  # primera muestra: base para las tasas
+        win32pdh.CollectQueryData(self.query)  # first sample: baseline for rates
 
     def _sum(self, counter):
         try:
             values = win32pdh.GetFormattedCounterArray(counter, win32pdh.PDH_FMT_DOUBLE)
             return sum(values.values())
         except win32pdh.error:
-            return 0.0  # sin instancias todavía
+            return 0.0  # no instances yet
 
     def read(self):
         win32pdh.CollectQueryData(self.query)
@@ -96,11 +96,11 @@ class PdhCounters:
 
 
 def gpu_info():
-    """(nombre, VRAM total en bytes) del adaptador con más VRAM.
+    """(name, total VRAM in bytes) of the adapter with the most VRAM.
 
-    WMI (AdapterRAM) es uint32 y se queda en 4 GB; el registro guarda el tamaño
-    real en un QWORD. Recorremos las subclaves de la clase 'Display' porque la
-    GPU no siempre está en '0000' (adaptadores virtuales, drivers viejos)."""
+    WMI's AdapterRAM is a uint32 capped at 4 GB; the registry stores the real
+    size as a QWORD. Walk every subkey of the 'Display' class because the GPU
+    is not always under '0000' (virtual adapters, leftover drivers)."""
     base = r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}"
     best_name, best_size = "GPU", 0
     try:
@@ -119,12 +119,12 @@ def gpu_info():
     return best_name, best_size or None
 
 
-# --- temperaturas vía LibreHardwareMonitor -----------------------------------
+# --- temperatures through LibreHardwareMonitor -------------------------------
 class Temps:
-    """Lee el JSON de LHM en un hilo aparte para que una petición lenta nunca
-    congele el dibujo. `cpu`, `gpu` y `disk` quedan en None si no hay dato."""
+    """Polls LHM's JSON on a background thread so a slow request never freezes
+    the display. `cpu`, `gpu` and `disk` stay None when there is no reading."""
 
-    # Sensor preferido por componente, en orden; si ninguno existe se usa el máximo.
+    # Preferred sensor per component, in order; falls back to the hottest one.
     PREFER = {
         "cpu": ("CPU Package", "Core (Tctl/Tdie)", "Core Max"),
         "gpu": ("GPU Core", "GPU Hot Spot"),
@@ -148,7 +148,7 @@ class Temps:
         sid = node.get("SensorId", "")
         if node.get("Type") == "Temperature" and "Distance" not in node.get("Text", ""):
             value = self._number(node.get("Value"))
-            if value and value > 0:  # 0 °C = sensor sin leer (p. ej. SMART dormido)
+            if value and value > 0:  # 0 °C = sensor not read yet (e.g. SMART asleep)
                 for kind, pattern in self.KIND:
                     if pattern.match(sid):
                         found[kind].append((node.get("Text", ""), value))
@@ -175,12 +175,12 @@ class Temps:
             except (OSError, ValueError):
                 self.online = False
                 self.cpu = self.gpu = self.disk = None
-                time.sleep(10)  # LHM apagado: reintentar sin martillar el puerto
+                time.sleep(10)  # LHM is down: retry without hammering the port
 
 
-# --- helpers de dibujo -------------------------------------------------------
+# --- drawing helpers ---------------------------------------------------------
 def bar(pct, width):
-    """Barra con resolución de 1/8 de carácter: '█' llenos + un parcial."""
+    """Bar with 1/8-character resolution: full '█' blocks plus one partial."""
     pct = max(0.0, min(100.0, pct))
     eighths = round(pct / 100 * width * 8)
     full, part = divmod(eighths, 8)
@@ -190,7 +190,7 @@ def bar(pct, width):
 
 
 def sparkline(values, width):
-    """Últimas `width` muestras (0–100) como bloques verticales."""
+    """Last `width` samples (0–100) as vertical blocks."""
     tail = list(values)[-width:]
     tail = [0.0] * (width - len(tail)) + tail
     return "".join(level_color(v) + SPARK[round(v / 100 * 8)] for v in tail) + RESET
@@ -205,7 +205,7 @@ def human(n):
 
 
 def short(n):
-    """Tamaño compacto para la tira: 934B, 41K, 13M, 2.5G."""
+    """Compact size for the strip: 934B, 41K, 13M, 2.5G."""
     for unit in ("B", "K", "M", "G", "T"):
         if abs(n) < 1000:
             return f"{n:.0f}{unit}" if unit in "BKM" else f"{n:.1f}{unit}"
@@ -218,27 +218,27 @@ def temp(c):
 
 
 def row(label, pct, width, extra=""):
-    """Una fila que siempre cabe en `width` columnas, para que no se parta en dos.
+    """A row that always fits in `width` columns, so it never wraps.
 
-    Columnas fijas: ' ' + etiqueta(5) + ' ' + barra + ' ' + '100.0%'(6) + ' ' = 15.
-    La barra toma lo que sobra después del texto extra (entre 8 y 40 caracteres);
-    si aun así no cabe, se recorta el texto extra."""
+    Fixed columns: ' ' + label(5) + ' ' + bar + ' ' + '100.0%'(6) + ' ' = 15.
+    The bar takes what is left after the extra text (8 to 40 characters);
+    if it still does not fit, the extra text is truncated."""
     fixed = 15
     bar_w = max(8, min(40, width - fixed - len(extra)))
     extra = extra[: max(0, width - fixed - bar_w)]
     return f" {BOLD}{label:<5}{RESET} {bar(pct, bar_w)} {level_color(pct)}{pct:5.1f}%{RESET} {DIM}{extra}{RESET}"
 
 
-# --- muestreo ----------------------------------------------------------------
+# --- sampling ----------------------------------------------------------------
 class Sampler:
-    """Junta todas las fuentes y calcula las tasas (MB/s) entre dos muestras."""
+    """Gathers every source and computes rates (MB/s) between two samples."""
 
     def __init__(self):
         self.pdh = PdhCounters()
         self.temps = Temps()
         self.gpu_name, self.vram_total = gpu_info()
         self.hist = {k: collections.deque(maxlen=HISTORY) for k in ("cpu", "ram", "gpu", "disk")}
-        psutil.cpu_percent(percpu=True)  # primera llamada: base, devuelve 0
+        psutil.cpu_percent(percpu=True)  # first call: baseline, returns 0
         self.io, self.net, self.t = psutil.disk_io_counters(), psutil.net_io_counters(), time.monotonic()
 
     def sample(self):
@@ -259,15 +259,15 @@ class Sampler:
         return s
 
 
-# --- vistas ------------------------------------------------------------------
+# --- views -------------------------------------------------------------------
 def render_full(sp, s, width, tick):
     t = sp.temps
     spark_w = max(10, width - 9)
     freq = psutil.cpu_freq()
-    cpu_extra = f"{len(s['cores'])} hilos · {freq.current / 1000:.2f} GHz" if freq else f"{len(s['cores'])} hilos"
-    temp_hint = "" if t.online else f"  {DIM}(sin temperaturas: abre LibreHardwareMonitor){RESET}"
+    cpu_extra = f"{len(s['cores'])} threads · {freq.current / 1000:.2f} GHz" if freq else f"{len(s['cores'])} threads"
+    temp_hint = "" if t.online else f"  {DIM}(no temperatures: start LibreHardwareMonitor){RESET}"
     out = [
-        f" {fg(45)}{BOLD}{SPINNER[tick % 4]} pcmon{RESET} {DIM}{time.strftime('%H:%M:%S')} · q/Esc para salir{RESET}{temp_hint}",
+        f" {fg(45)}{BOLD}{SPINNER[tick % 4]} pcmon{RESET} {DIM}{time.strftime('%H:%M:%S')} · q/Esc to quit{RESET}{temp_hint}",
         "",
         row("CPU", s["cpu"], width, cpu_extra),
         f"       {sparkline(sp.hist['cpu'], spark_w)}",
@@ -285,13 +285,13 @@ def render_full(sp, s, width, tick):
     if t.online:
         parts = [f"{name} {temp(v)}" for name, v in (("CPU", t.cpu), ("GPU", t.gpu), ("SSD", t.disk)) if v is not None]
         out.append(f" {BOLD}TEMP{RESET}  " + "   ".join(parts))
-    out += ["", f" {BOLD}Hilos{RESET}"]
-    # Mini-barras por hilo, en columnas que caben en el ancho del pane.
+    out += ["", f" {BOLD}Threads{RESET}"]
+    # Mini bars per thread, in as many columns as the pane width allows.
     per_line = max(1, (width - 2) // 16)
     cells = [f"{i:>2} {bar(p, 6)} {p:3.0f}%" for i, p in enumerate(s["cores"])]
     for i in range(0, len(cells), per_line):
         out.append(" " + "  ".join(cells[i:i + per_line]))
-    out += ["", f" {BOLD}Discos{RESET}"]
+    out += ["", f" {BOLD}Drives{RESET}"]
     for part in psutil.disk_partitions(all=False):
         if "cdrom" in part.opts or not part.fstype:
             continue
@@ -304,8 +304,8 @@ def render_full(sp, s, width, tick):
 
 
 def render_strip(sp, s, width, tick):
-    """Una sola línea. Cada segmento lleva su largo visible (sin códigos ANSI)
-    para saber cuántos caben; los del final se descartan si el pane es angosto."""
+    """A single line. Each segment carries its visible length (without ANSI
+    codes) to know how many fit; trailing ones are dropped in narrow panes."""
     t = sp.temps
 
     def seg(label, pct, extra_plain="", extra_ansi=""):
@@ -338,10 +338,10 @@ def render_strip(sp, s, width, tick):
     return [line_ansi]
 
 
-# --- bucle principal ---------------------------------------------------------
+# --- main loop ---------------------------------------------------------------
 def wait_or_quit(seconds):
-    """Duerme `seconds` revisando el teclado cada 50 ms. True si hay que salir.
-    En un popup de Herdr las teclas llegan a pcmon, así q/Esc lo cierran."""
+    """Sleep `seconds`, checking the keyboard every 50 ms. True means quit.
+    In a Herdr popup the keys reach pcmon, so q/Esc close it."""
     end = time.monotonic() + seconds
     while time.monotonic() < end:
         while msvcrt.kbhit():
@@ -352,11 +352,11 @@ def wait_or_quit(seconds):
 
 
 def run(view):
-    os.system("")  # activa el procesado de secuencias ANSI en la consola de Windows
+    os.system("")  # enable ANSI escape processing in the Windows console
     sp = Sampler()
     tick = 0
     title = STRIP_TITLE if view is render_strip else "pcmon"
-    # \x1b]0;...\x07 = título de la terminal; \x1b[?25l = ocultar cursor.
+    # \x1b]0;...\x07 = terminal title; \x1b[?25l = hide cursor.
     sys.stdout.write(f"\x1b]0;{title}\x07\x1b[?25l\x1b[2J")
     try:
         while not wait_or_quit(INTERVAL):
@@ -364,29 +364,29 @@ def run(view):
             width = shutil.get_terminal_size((80, 24)).columns
             tick += 1
             out = view(sp, s, width, tick)
-            # \x1b[H = cursor a home; \x1b[K = borra el resto de la línea; \x1b[J = borra lo de abajo.
+            # \x1b[H = cursor home; \x1b[K = clear to end of line; \x1b[J = clear below.
             sys.stdout.write("\x1b[H" + "\n".join(line + "\x1b[K" for line in out) + "\x1b[J")
             sys.stdout.flush()
     except KeyboardInterrupt:
         pass
     finally:
-        sys.stdout.write("\x1b[?25h" + RESET + "\n")  # devolver el cursor
+        sys.stdout.write("\x1b[?25h" + RESET + "\n")  # restore the cursor
 
 
-# --- integración con Herdr ---------------------------------------------------
+# --- Herdr integration -------------------------------------------------------
 def herdr(*args):
-    """Llama al CLI de Herdr y devuelve el campo `result` de su JSON."""
+    """Call the Herdr CLI and return the `result` field of its JSON output."""
     exe = os.environ.get("HERDR_BIN_PATH", "herdr")
     out = subprocess.run([exe, *args], capture_output=True, text=True, encoding="utf-8", check=True)
-    return json.loads(out.stdout)["result"] if out.stdout.strip() else {}  # `pane run` no imprime nada
+    return json.loads(out.stdout)["result"] if out.stdout.strip() else {}  # `pane run` prints nothing
 
 
 def toggle_strip():
-    """Abre la tira debajo del pane enfocado, o la cierra si ya hay una en la pestaña.
+    """Open the strip under the focused pane, or close it if the tab already has one.
 
-    La tira se reconoce por su título de terminal (STRIP_TITLE). El split usa un
-    `ratio` = parte que conserva el pane original, calculado para que la tira
-    quede de STRIP_ROWS filas sin importar el alto de la ventana."""
+    The strip is recognized by its terminal title (STRIP_TITLE). The split
+    `ratio` is the share the original pane keeps, computed so the strip gets
+    `strip_rows` rows whatever the window height (Herdr clamps it to its minimum)."""
     strip_rows = 2
     target = os.environ.get("HERDR_PANE_ID") or herdr("pane", "current")["pane"]["pane_id"]
     panes = herdr("pane", "list")["panes"]
@@ -409,7 +409,7 @@ def main():
     if "--toggle-strip" in args:
         toggle_strip()
     elif "--open-popup" in args:
-        # El popup lo declara herdr-plugin.toml ([[panes]] id = "monitor").
+        # The popup is declared in herdr-plugin.toml ([[panes]] id = "monitor").
         herdr("plugin", "pane", "open", "--plugin", "pcmon", "--entrypoint", "monitor")
     else:
         run(render_strip if "--strip" in args else render_full)
