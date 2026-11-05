@@ -1,3 +1,3 @@
 @echo off
-rem Lanzador: usa el venv del repo (creado por `herdr plugin install` o a mano).
+rem Launcher: uses the repo's venv (created by `herdr plugin install` or by hand).
 "%~dp0.venv\Scripts\python.exe" "%~dp0pcmon.py" %*
