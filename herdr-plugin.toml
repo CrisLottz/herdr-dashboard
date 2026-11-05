@@ -1,0 +1,35 @@
+id = "pcmon"
+name = "pcmon"
+version = "0.1.0"
+min_herdr_version = "0.9.5"
+description = "Live CPU, RAM, GPU, VRAM, disk, network and temperature monitor for Windows"
+platforms = ["windows"]
+
+# Install-time setup (only for `herdr plugin install`): a private venv in the plugin root.
+[[build]]
+command = ["py", "-3", "-m", "venv", ".venv"]
+
+[[build]]
+command = [".venv\\Scripts\\python.exe", "-m", "pip", "install", "-q", "-r", "requirements.txt"]
+
+# Full view as a floating popup: takes no space in the tiled layout; q/Esc closes it.
+[[panes]]
+id = "monitor"
+title = "pcmon"
+placement = "popup"
+width = "70%"
+height = "80%"
+command = ["cmd", "/d", "/c", "pcmon.cmd"]
+
+[[actions]]
+id = "open"
+title = "Open pcmon popup"
+contexts = ["workspace"]
+command = ["cmd", "/d", "/c", "pcmon.cmd", "--open-popup"]
+
+# One-line strip under the focused pane; running it again closes the strip.
+[[actions]]
+id = "toggle-strip"
+title = "Toggle pcmon strip"
+contexts = ["workspace"]
+command = ["cmd", "/d", "/c", "pcmon.cmd", "--toggle-strip"]
