@@ -13,7 +13,7 @@ A tiny live system monitor for the Windows terminal, built to live inside [Herdr
 - **Network** down/up
 - **Temperatures** for CPU, GPU and SSD through [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) (optional)
 
-Hand-written ANSI rendering (no TUI framework), ~450 lines of commented Python, two dependencies: `psutil` and `pywin32`.
+Hand-written ANSI rendering (no TUI framework), ~420 lines of commented Python, two dependencies: `psutil` and `pywin32`.
 
 ## Views
 
