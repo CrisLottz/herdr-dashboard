@@ -1,0 +1,39 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.10", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Create the venv the way the plugin does
+        run: python bootstrap.py --install
+      - name: Unit tests (Linux)
+        if: runner.os != 'Windows'
+        run: .venv/bin/python -m unittest discover -s tests -t . -v
+      - name: Unit tests (Windows)
+        if: runner.os == 'Windows'
+        run: .venv\Scripts\python.exe -m unittest discover -s tests -t . -v
+      - name: Smoke-test the system sampler and views
+        shell: bash
+        run: |
+          PY=.venv/bin/python; [ -f .venv/Scripts/python.exe ] && PY=.venv/Scripts/python.exe
+          PYTHONPATH=. PYTHONIOENCODING=utf-8 $PY -c "
+          import time
+          from hdash.system import Sampler
+          from hdash.views import SystemView, StripView
+          sp = Sampler(); time.sleep(1)
+          for v in (SystemView(sp), StripView(sp)):
+              v.update(); print(len(v.render(80, 40)), 'lines')
+          "

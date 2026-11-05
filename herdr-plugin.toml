@@ -1,35 +1,38 @@
-id = "pcmon"
-name = "pcmon"
-version = "0.1.0"
+id = "herdr-dashboard"
+name = "herdr-dashboard"
+version = "0.2.0"
 min_herdr_version = "0.9.5"
-description = "Live CPU, RAM, GPU, VRAM, disk, network and temperature monitor for Windows"
-platforms = ["windows"]
+description = "Live sidebar: agents' CPU/RAM, dev ports, git worktrees and system stats"
+platforms = ["linux", "macos", "windows"]
 
-# Install-time setup (only for `herdr plugin install`): a private venv in the plugin root.
+# Every command goes through bootstrap.py, the same argv on every OS: it creates
+# the private .venv on first use and then runs `python -m hdash <command>` in it.
 [[build]]
-command = ["py", "-3", "-m", "venv", ".venv"]
+command = ["python", "bootstrap.py", "--install"]
 
-[[build]]
-command = [".venv\\Scripts\\python.exe", "-m", "pip", "install", "-q", "-r", "requirements.txt"]
-
-# Full view as a floating popup: takes no space in the tiled layout; q/Esc closes it.
+# Full system dashboard as a floating popup: no space in the tiled layout; q/Esc closes it.
 [[panes]]
-id = "monitor"
-title = "pcmon"
+id = "system"
+title = "herdr-dashboard"
 placement = "popup"
 width = "70%"
 height = "80%"
-command = ["cmd", "/d", "/c", "pcmon.cmd"]
+command = ["python", "bootstrap.py", "system"]
 
 [[actions]]
-id = "open"
-title = "Open pcmon popup"
+id = "toggle-sidebar"
+title = "Toggle dashboard sidebar"
 contexts = ["workspace"]
-command = ["cmd", "/d", "/c", "pcmon.cmd", "--open-popup"]
+command = ["python", "bootstrap.py", "toggle-sidebar"]
 
-# One-line strip under the focused pane; running it again closes the strip.
+[[actions]]
+id = "open-system"
+title = "Open system dashboard popup"
+contexts = ["workspace"]
+command = ["python", "bootstrap.py", "open-popup"]
+
 [[actions]]
 id = "toggle-strip"
-title = "Toggle pcmon strip"
+title = "Toggle system strip"
 contexts = ["workspace"]
-command = ["cmd", "/d", "/c", "pcmon.cmd", "--toggle-strip"]
+command = ["python", "bootstrap.py", "toggle-strip"]
