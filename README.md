@@ -91,6 +91,8 @@ description = "system strip"
 
 Without Herdr, the system views still work in any terminal: `python bootstrap.py system` or `python bootstrap.py strip`.
 
+**After a restart.** Herdr restores the layout but not what ran inside each pane. The plugin's startup hook (`python bootstrap.py restore`) finds the panes labelled `herdr-dashboard` / `herdr-dashboard-strip` and relaunches the view in them; it checks the shell's process tree first, so it never types into a dashboard that is already running.
+
 ### Native tab-bar status (no pane at all)
 
 Herdr can run a command every few seconds and show its last line at the right of the tab row. `python bootstrap.py status` prints `CPU 9% 65° · RAM 78% · GPU 1% 48°` for exactly that. Add it under `[ui]`, using the plugin's folder (`herdr plugin list` shows it):
@@ -168,7 +170,7 @@ Without it, everything else works and temperatures are hidden. `HDASH_LHM_URL` p
 ```
 bootstrap.py           every command enters here: creates/updates .venv, then runs `python -m hdash`
 hdash/
-  __main__.py          commands: sidebar, system, strip, status, toggle-sidebar, toggle-strip, open-popup
+  __main__.py          commands: sidebar, system, strip, status, restore, toggle-sidebar, toggle-strip, open-popup
   herdr.py             Herdr CLI wrapper and the toggles that split/close our panes
   collect.py           background collectors: Agents, Ports, Worktrees
   sidebar.py           the sidebar: sections, selection, details, keys
@@ -240,6 +242,8 @@ Requisitos: Herdr 0.9.5 o superior, Python 3.10 o superior disponible como **`py
 Instálalo con `herdr plugin install CrisLottz/herdr-dashboard`. La primera vez se crea un `.venv` privado dentro de la carpeta del plugin; no se instala nada global. Después copia los tres bloques `[[keys.command]]` de la sección [Install](#install) en la config de Herdr (`~/.config/herdr/config.toml` en Linux, `%APPDATA%\herdr\config.toml` en Windows) y ejecuta `herdr server reload-config`.
 
 Sin Herdr, las vistas de sistema funcionan en cualquier terminal: `python bootstrap.py system` o `python bootstrap.py strip`.
+
+**Después de reiniciar:** Herdr restaura el layout, pero no lo que corría dentro de cada pane. El hook de arranque del plugin (`python bootstrap.py restore`) busca los panes marcados `herdr-dashboard` y vuelve a lanzar la vista en ellos. Antes revisa el árbol de procesos del shell, así que nunca escribe dentro de un dashboard que ya está corriendo.
 
 **Estado nativo en la barra de pestañas:** Herdr puede correr un comando cada pocos segundos y mostrar su última línea a la derecha de las pestañas. `python bootstrap.py status` imprime justo eso: `CPU 9% 65° · RAM 78% · GPU 1% 48°`, sin ocupar ningún pane. El bloque `tab_bar_right` está en la sección [Native tab-bar status](#native-tab-bar-status-no-pane-at-all).
 

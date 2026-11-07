@@ -7,6 +7,7 @@
     toggle-strip     open/close the strip under the focused Herdr pane
     open-popup       open the system dashboard as a Herdr popup
     status           print one plain line (CPU, RAM, GPU, temps) for Herdr's tab-bar status area
+    restore          relaunch the sidebar/strip in panes Herdr restored empty (plugin startup hook)
 """
 
 import sys
@@ -42,10 +43,10 @@ def status_line():
 
 def main():
     cmd = (sys.argv[1:] or ["system"])[0]
-    if cmd in ("toggle-sidebar", "toggle-strip", "open-popup"):
+    if cmd in ("toggle-sidebar", "toggle-strip", "open-popup", "restore"):
         try:
             {"toggle-sidebar": herdr.toggle_sidebar, "toggle-strip": herdr.toggle_strip,
-             "open-popup": herdr.open_popup}[cmd]()
+             "open-popup": herdr.open_popup, "restore": herdr.restore}[cmd]()
         except herdr.HerdrError as exc:
             sys.exit(f"herdr-dashboard: {exc}")
         except (KeyError, StopIteration, ValueError, TypeError) as exc:

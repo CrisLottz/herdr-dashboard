@@ -10,6 +10,11 @@ platforms = ["linux", "macos", "windows"]
 [[build]]
 command = ["python", "bootstrap.py", "--install"]
 
+# Herdr restores the layout after a restart but not the processes inside panes:
+# relaunch the sidebar/strip in the panes that kept our label.
+[[startup]]
+command = ["python", "bootstrap.py", "restore"]
+
 # Full system dashboard as a floating popup: no space in the tiled layout; q/Esc closes it.
 [[panes]]
 id = "system"
