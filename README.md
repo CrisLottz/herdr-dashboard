@@ -7,20 +7,20 @@ A live sidebar for [Herdr](https://herdr.dev): see what every agent is costing y
 ```
  herdr-dashboard            02:11
 ─ AGENTS 5 ──────────────────────
- ◓ Daily chat           194M  0.2%
- ○ Strivex Labs         261M  0.0%
- ○ Atlas Development    179M  0.0%
+ ◓ notes chat           194M  0.2%
+ ○ frontend             261M  0.0%
+ ○ api refactor         179M  0.0%
 ─ PORTS 2 ───────────────────────
  :3306  mysql             pid 5856
- :8000  python    Atlas Development
+ :8000  python    api refactor
 ▸ WORKTREES 5 ───────────────────
- atlas-headless-api
- ● Billing                      ↑5
- ○ feat/mes-factura          clean
-   ~/code/atlas-headless-api_wt/mes
-   2 hours ago · Contratos firmados
+ shop-api
+ ● develop                      ↑5
+ ○ feat/checkout             clean
+   ~/code/shop-api_wt/checkout
+   2 hours ago · Add checkout totals
    no panes here
- master_brain
+ dotfiles
  ◓ main                         ✎2
 ─ SYSTEM ────────────────────────
  CPU  ██▏·········  18%       67°C
